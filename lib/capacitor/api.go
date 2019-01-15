@@ -7,6 +7,7 @@ import (
     "net/http"
     "net/url"
     "reflect"
+    "strconv"
     "strings"
 
     "github.com/tidwall/gjson"
@@ -22,7 +23,7 @@ func getToken(username, password string) string {
   req, err := http.NewRequest("POST", BASE_API + "api-token-auth/", strings.NewReader(formdata.Encode()))
   req.Close = true
   req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-  response, err := client.Do(req)
+  response, err := httpClient.Do(req)
   if err != nil {
       log.Fatalf("The HTTP request failed with error %s\n", err)
   } else {
@@ -31,6 +32,36 @@ func getToken(username, password string) string {
       token = gjson.Get(string(data), "token").String()
   }
   return token
+}
+
+// Given an api endpoint and id for an entity, get the result
+// and bind to a struct which represents the entity.
+// Return the response body, struct and error if any
+func GetRecord(endpoint string, id int) (string, interface{}, error) {
+  result := ""
+  entity := AbstractContainer{make(map[string]string)}
+
+  req, err := http.NewRequest("GET", API + endpoint + "/" + strconv.Itoa(id), nil)
+  req.Close = true
+  req.Header.Add("Authorization", token)
+  response, err := httpClient.Do(req)
+
+  if err != nil {
+    log.Fatalf("The HTTP request failed with error %s\n", err)
+  } else {
+    defer response.Body.Close()
+    data, _ := ioutil.ReadAll(response.Body)
+    result = string(data)
+    gjson.Parse(result).ForEach(func(key, value gjson.Result) bool {
+      if (value.String() != "") {
+        entity.Package[key.String()] = value.String()
+        fmt.Printf("Got key: %v, value: %v\n", key, value)
+      }
+      return true
+    })
+
+  }
+  return result, entity.Package, err
 }
 
 // Given a model which maps directly into the api,
@@ -65,7 +96,7 @@ func SetRecord(entity string, m interface{}) (string, error) {
   req.Close = true
   req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
   req.Header.Add("Authorization", token)
-  response, err := client.Do(req)
+  response, err := httpClient.Do(req)
 
   if err != nil {
     log.Fatalf("The HTTP request failed with error %s\n", err)
@@ -83,7 +114,7 @@ func getJSONCollection(name string) string {
   jsonResult := ""
   req, err := http.NewRequest("GET", API + name + "/", nil)
   req.Header.Add("Authorization", token)
-  response, err := client.Do(req)
+  response, err := httpClient.Do(req)
   if err != nil {
       fmt.Printf("The HTTP request failed with error %s\n", err)
   } else {
